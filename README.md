@@ -28,7 +28,7 @@ A Python-based IP Address Management system for tracking and managing private ne
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/rubysash//ipam_tool.git
+git clone https://github.com/rubysash/ipam_tool.git
 cd ipam_tool
 ```
 
@@ -104,13 +104,13 @@ The `config.py` file contains customizable settings:
 
 ```
 ipam_project/
-├── config.py          # Configuration settings
+├── config.py         # Configuration settings
 ├── db.py             # Database management
 ├── gui.py            # Main GUI application
-├── my_logging.py     # Logging configuration
+├── my_logging.py     # Global Logging configuration
 ├── main.py           # Application entry point
 ├── search.py         # Search functionality
-├── utils.py          # Utility functions
+├── utils.py          # Utility functions such as validation
 └── ipam_data.db      # SQLite database
 ```
 
