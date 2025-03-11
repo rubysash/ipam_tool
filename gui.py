@@ -15,7 +15,7 @@ class IPAMApp:
         """ Initialize the GUI layout """
         self.root = root
         self.root.title(f"IP Address Management (IPAM) v{config.VERSION}")
-        self.root.geometry("1024x800")
+        self.root.geometry("1150x750")
         
         # Initialize style before setting any widget configurations
         self.style = tb.Style(config.THEME)
@@ -38,9 +38,12 @@ class IPAMApp:
         self.style.configure("Treeview", 
                             font=config.TREEVIEW_FONT,
                             rowheight=int(config.TREEVIEW_FONT[1] * 1.6))
+        
+        # Bold Headers
         self.style.configure("Treeview.Heading", 
-                            font=config.TREEVIEW_FONT,
-                            padding=config.WIDGET_PADDING)
+                     font=(config.FONT_FAMILY, config.TREEVIEW_FONT[1], "bold"),
+                     padding=config.WIDGET_PADDING)
+
         
         # Configure message styles
         self.style.configure("Flash.TLabel", 
@@ -105,10 +108,21 @@ class IPAMApp:
             "ID", "CIDR", "Note", "Cust", "Cust Email", "Dev Type", "CGW IP"
         ), show="headings", style="Treeview")
 
-        # Configure column headers
+        # Define column widths
+        column_widths = {
+            "ID": 0,  # Hidden
+            "CIDR": 150,
+            "Note": 250,
+            "Cust": 150,
+            "Cust Email": 250,
+            "Dev Type": 120,
+            "CGW IP": 150
+        }
+
+        # Configure column headers and data alignment
         for col in self.tree["columns"]:
-            self.tree.heading(col, text=col, command=lambda c=col: self.sort_treeview(c))
-            self.tree.column(col, anchor="center", minwidth=100 if col != "ID" else 0)
+            self.tree.heading(col, text=col, anchor="w", command=lambda c=col: self.sort_treeview(c))  # Left-align header
+            self.tree.column(col, anchor="w", width=column_widths.get(col, 100), minwidth=100 if col != "ID" else 0)  # Left-align data
 
         self.tree.column("ID", width=0, stretch=False)  # Hide ID column
 
@@ -276,12 +290,11 @@ class IPAMApp:
             ))
 
     def open_modify_popup(self, prefill_cidr=None, is_new_record=False):
-        """ Open a popup to modify subnet details, displaying in two equal columns. """
+        """ Open a popup to modify subnet details, allowing passwords to be revealed on click. """
         popup = tk.Toplevel(self.root)
         popup.title("Modify Subnet")
-        popup.geometry("600x400")
+        popup.geometry("900x500")
 
-        # Define fields for input (Dev Type, Dev User, Dev Pass, VPN1 PSK, VPN2 PSK will not be in the main tree)
         fields = [
             ("CIDR", "cidr"), ("Note", "note"), ("Cust", "cust"), ("Cust Email", "cust_email"),
             ("Dev IP", "dev_ip"), ("CGW IP", "cgw_ip"), ("Dev Type", "dev_type"),
@@ -290,39 +303,60 @@ class IPAMApp:
 
         entries = {}
 
-        # Create two-column layout
+        # Create form layout
         form_frame = ttk.Frame(popup)
         form_frame.pack(padx=20, pady=20, fill="both", expand=True)
 
         for i, (label_text, key) in enumerate(fields):
-            row, col = divmod(i, 2)  # Arrange in two columns
-
+            row, col = divmod(i, 2)
             ttk.Label(form_frame, text=label_text, font=config.LABEL_FONT).grid(row=row, column=col * 2, padx=10, pady=5, sticky="w")
-
+            
+            # Mask password field initially
             show_value = "*" if key == "dev_pass" else ""
-            entries[key] = ttk.Entry(form_frame, font=config.ENTRY_FONT, show=show_value)
-            entries[key].grid(row=row, column=(col * 2) + 1, padx=10, pady=5, sticky="ew")
+            entry = ttk.Entry(form_frame, font=config.ENTRY_FONT, show=show_value)
+            entry.grid(row=row, column=(col * 2) + 1, padx=10, pady=5, sticky="ew")
+            entries[key] = entry
+
+            # Allow clicking to reveal password
+            if key == "dev_pass":
+                def toggle_password_visibility(e, entry=entry):
+                    """ Toggle password visibility when clicked """
+                    if entry.cget("show") == "*":
+                        entry.config(show="")  # Show the password
+                    else:
+                        entry.config(show="*")  # Mask the password again
+
+                entry.bind("<Button-1>", toggle_password_visibility)
 
         form_frame.columnconfigure(1, weight=1)
         form_frame.columnconfigure(3, weight=1)
 
-        # Get selected item data if modifying
-        selected_item = self.tree.selection() if not is_new_record else None
-        subnet_values = self.tree.item(selected_item)["values"] if selected_item else None
+        # Retrieve selected treeview item
+        selected_item = self.tree.selection()
+        subnet_values = None
 
+        if selected_item and not is_new_record:
+            item_id = selected_item[0]
+            subnet_values = self.tree.item(item_id, "values")
+
+        # Ensure CIDR selection works correctly
         if subnet_values:
             stored_values = {
                 "cidr": subnet_values[1], "note": subnet_values[2], "cust": subnet_values[3],
                 "cust_email": subnet_values[4], "dev_ip": subnet_values[5], "cgw_ip": subnet_values[6]
             }
+
             db_entry = self.db.get_all_subnets()
             full_data = next((s for s in db_entry if s["cidr"] == stored_values["cidr"]), {})
+
             stored_values.update(full_data)
 
             for key, entry in entries.items():
                 entry.insert(0, stored_values.get(key, ""))
 
-        # Save changes function
+        elif prefill_cidr:
+            entries["cidr"].insert(0, prefill_cidr)
+
         def save_changes():
             data = {key: entry.get().strip() for key, entry in entries.items()}
 
@@ -351,9 +385,7 @@ class IPAMApp:
             self.load_subnets()
             popup.destroy()
 
-        # Save button
         ttk.Button(popup, text="Save", command=save_changes, style="TButton").pack(pady=10)
-
 
 if __name__ == "__main__":
     root = tk.Tk()
