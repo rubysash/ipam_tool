@@ -57,7 +57,6 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Database error: {e}")
 
-
     def update_subnet(self, subnet_id, cidr, note, cust, cust_email, dev_type,
                     dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk):
         """ Update subnet details """
@@ -72,13 +71,17 @@ class DatabaseManager:
             print(f"Database error: {e}")
 
     def search_subnets(self, query):
-        """ Search for subnets by CIDR or note """
+        """ Search for subnets by relevant displayed fields """
         try:
             self.cursor.execute(
-                "SELECT id, cidr, note FROM subnets WHERE cidr LIKE ? OR note LIKE ?",
-                (f"%{query}%", f"%{query}%"),
+                """SELECT id, cidr, note, cust, cust_email, dev_type, cgw_ip 
+                FROM subnets 
+                WHERE cidr LIKE ? OR note LIKE ? OR cust LIKE ? OR cust_email LIKE ? 
+                OR dev_type LIKE ? OR cgw_ip LIKE ?""",
+                (f"%{query}%",) * 6,
             )
-            return [{"id": row[0], "cidr": row[1], "note": row[2]} for row in self.cursor.fetchall()]
+            columns = [desc[0] for desc in self.cursor.description]
+            return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             return []

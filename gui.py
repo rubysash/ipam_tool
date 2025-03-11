@@ -268,12 +268,17 @@ class IPAMApp:
         self.search_handler.trigger_search(query)
 
     def perform_search(self, query=""):
+        """Fetch search results from the database and update Treeview."""
         for row in self.tree.get_children():
             self.tree.delete(row)
 
         results = self.db.search_subnets(query)
         for subnet in results:
-            self.tree.insert("", "end", values=(subnet["id"], subnet["cidr"], subnet["note"]))
+            self.tree.insert("", "end", values=(
+                subnet["id"], subnet["cidr"], subnet["note"], subnet["cust"],
+                subnet["cust_email"], subnet["dev_type"], subnet["cgw_ip"]
+            ))
+
 
     def load_subnets(self):
         """ Load subnets into the Treeview, masking passwords. """
