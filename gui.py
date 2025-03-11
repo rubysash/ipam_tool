@@ -79,6 +79,72 @@ class IPAMApp:
         self.frame3.pack(fill="x", pady=5)
 
     def setup_widgets(self):
+        """ Create search bar, messages, treeview, and modify button with updated columns """
+        # Search Label and Entry
+        search_label = ttk.Label(self.frame0, text="Search:", font=config.LABEL_FONT)
+        search_label.pack(side="left", padx=config.WIDGET_PADDING)
+
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(self.frame0, textvariable=self.search_var, font=config.ENTRY_FONT)
+        self.search_entry.pack(fill="x", expand=True, padx=config.WIDGET_PADDING, pady=config.WIDGET_PADDING)
+        self.search_entry.bind("<KeyRelease>", self.on_search_input)
+
+        # Flash Message
+        self.flash_message = ttk.Label(self.frame1, text="", foreground="red", font=config.MESSAGE_FONT, wraplength=550)
+        self.flash_message.pack(pady=config.WIDGET_PADDING)
+
+        # CIDR Blocks Label
+        header_label = ttk.Label(self.frame2, text="Assigned CIDR Blocks", font=config.HEADING_FONT)
+        header_label.pack(anchor="w", padx=config.WIDGET_PADDING, pady=config.WIDGET_PADDING)
+
+        # Treeview Setup
+        tree_frame = ttk.Frame(self.frame2)
+        tree_frame.pack(fill="both", expand=True, pady=config.WIDGET_PADDING)
+
+        self.tree = ttk.Treeview(tree_frame, columns=(
+            "ID", "CIDR", "Note", "Cust", "Cust Email", "Dev Type", "Dev IP", 
+            "Dev User", "Dev Pass", "CGW IP", "VPN1 PSK", "VPN2 PSK"
+        ), show="headings", style="Treeview")
+
+        # Configure column headers
+        for col in self.tree["columns"]:
+            self.tree.heading(col, text=col, command=lambda c=col: self.sort_treeview(c))
+            self.tree.column(col, anchor="center", minwidth=100 if col != "ID" else 0)
+
+        self.tree.column("ID", width=0, stretch=False)  # Hide ID column
+        self.tree.column("Dev Pass", minwidth=100, anchor="center")  # Password column
+
+        # Add double-click binding
+        self.tree.bind("<Double-1>", self.on_double_click)
+
+        # Scrollbar
+        y_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=y_scroll.set)
+        y_scroll.pack(side="right", fill="y")
+
+        self.tree.pack(fill="both", expand=True)
+
+        # Button and Subnet Size Selection Frame
+        btn_frame = ttk.Frame(self.frame3)
+        btn_frame.pack(pady=config.FRAME_PADDING)
+
+        ttk.Button(btn_frame, text="Add", command=lambda: self.open_modify_popup(None, True), style="success.TButton").pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Modify", command=self.open_modify_popup, style="warning.TButton").pack(side="left", padx=5)
+
+        subnet_frame = ttk.Frame(btn_frame)
+        subnet_frame.pack(side="left", padx=5)
+
+        ttk.Button(subnet_frame, text="Suggest Next", command=self.suggest_next_subnet, style="success.TButton").pack(side="left")
+
+        self.subnet_size_var = tk.StringVar(value="/28")
+        subnet_sizes = [f"/{i}" for i in range(24, 31)]
+        subnet_combo = ttk.Combobox(subnet_frame, textvariable=self.subnet_size_var, values=subnet_sizes, state="readonly", width=4, font=config.BUTTON_FONT)
+        subnet_combo.pack(side="left", padx=5)
+
+        self.load_subnets()
+        self.sort_treeview("CIDR")
+
+    def setup_widgets2(self):
         """ Create search bar, messages, treeview, and modify button """
         # Search Label and Entry
         search_label = ttk.Label(self.frame0, text="Search:", font=config.LABEL_FONT)
@@ -349,14 +415,20 @@ class IPAMApp:
             self.tree.insert("", "end", values=(subnet["id"], subnet["cidr"], subnet["note"]))
 
     def load_subnets(self):
+        """ Load subnets into the Treeview, masking passwords. """
         for row in self.tree.get_children():
             self.tree.delete(row)
 
         subnets = self.db.get_all_subnets()
         for subnet in subnets:
-            self.tree.insert("", "end", values=(subnet["id"], subnet["cidr"], subnet["note"]))
+            masked_pass = "*****" if subnet["dev_pass"] else ""
+            self.tree.insert("", "end", values=(
+                subnet["id"], subnet["cidr"], subnet["note"], subnet["cust"], subnet["cust_email"],
+                subnet["dev_type"], subnet["dev_ip"], subnet["dev_user"], masked_pass, 
+                subnet["cgw_ip"], subnet["vpn1_psk"], subnet["vpn2_psk"]
+            ))
 
-    def open_modify_popup(self, prefill_cidr=None, is_new_record=False):
+    def open_modify_popup2(self, prefill_cidr=None, is_new_record=False):
         """ Open a popup window for assigning/unassigning CIDR blocks """
         popup = tk.Toplevel(self.root)
         popup.title("Modify CIDR Assignment")
@@ -476,6 +548,60 @@ class IPAMApp:
                 command=lambda: save_changes(False),
                 style="danger.TButton" 
             ).pack(side="right", padx=5)
+
+    def open_modify_popup(self, prefill_cidr=None, is_new_record=False):
+        """ Open a popup to modify subnet details, including new fields with unmasked passwords. """
+        popup = tk.Toplevel(self.root)
+        popup.title("Modify Subnet")
+        popup.geometry("500x500")
+
+        fields = ["CIDR", "Note", "Cust", "Cust Email", "Dev Type", "Dev IP", "Dev User", "Dev Pass", "CGW IP", "VPN1 PSK", "VPN2 PSK"]
+        entries = {}
+
+        for field in fields:
+            ttk.Label(popup, text=field, font=config.LABEL_FONT).pack(pady=(5, 2))
+            show_value = "" if field == "Dev Pass" else ""
+            entries[field] = ttk.Entry(popup, font=config.ENTRY_FONT, show=show_value)
+            entries[field].pack(pady=(2, 5))
+
+        selected_item = self.tree.selection() if not is_new_record else None
+        subnet_values = self.tree.item(selected_item)["values"] if selected_item else None
+
+        if subnet_values:
+            for i, field in enumerate(fields):
+                value = subnet_values[i + 1]  # Skip ID column
+                entries[field].insert(0, value if value != "*****" else "")
+
+        def save_changes():
+            """ Save changes to the database, ensuring validation is met. """
+            data = {field: entries[field].get().strip() for field in fields}
+
+            if not Utils.validate_cidr(data["CIDR"]):
+                messagebox.showerror("Error", "Invalid CIDR format.")
+                return
+            if not Utils.validate_email(data["Cust Email"]):
+                messagebox.showerror("Error", "Invalid email format.")
+                return
+
+            if subnet_values:
+                self.db.update_subnet(
+                    subnet_values[0], data["CIDR"], data["Note"], data["Cust"], data["Cust Email"],
+                    data["Dev Type"], data["Dev IP"], data["Dev User"], data["Dev Pass"],
+                    data["CGW IP"], data["VPN1 PSK"], data["VPN2 PSK"]
+                )
+                self.update_flash_message("Subnet updated successfully", "success")
+            else:
+                self.db.add_subnet(
+                    data["CIDR"], data["Note"], data["Cust"], data["Cust Email"], data["Dev Type"],
+                    data["Dev IP"], data["Dev User"], data["Dev Pass"], data["CGW IP"],
+                    data["VPN1 PSK"], data["VPN2 PSK"]
+                )
+                self.update_flash_message("Subnet added successfully", "success")
+
+            self.load_subnets()
+            popup.destroy()
+
+        ttk.Button(popup, text="Save", command=save_changes, style="TButton").pack(pady=10)
 
 
 if __name__ == "__main__":

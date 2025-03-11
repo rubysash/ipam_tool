@@ -55,3 +55,8 @@ class Utils:
                 return f"Error: Cannot assign {new_cidr} because {existing_cidr} already exists and covers this range."
 
         return None
+
+    @staticmethod
+    def validate_email(email: str) -> bool:
+        """Validate email format."""
+        return bool(re.fullmatch(r"[^@]+@[^@]+\.[a-zA-Z]{2,}", email))
