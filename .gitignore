@@ -1,0 +1,20 @@
+# Ignore everything by default
+*
+
+# Allow only specific file types and files
+!*.py
+!*.md
+!requirements.txt
+!demo.png
+
+# Allow directories (otherwise, Git won't track them)
+!*/
+
+# Ignore compiled Python files and cache folders
+__pycache__/
+*.py[cod]
+*$py.class
+Lib/
+Scripts/
+*.db
+pyvenv.cfg
