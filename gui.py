@@ -9,10 +9,11 @@ from search import SearchHandler
 from utils import Utils
 from encryption import EncryptionManager
 from db import DatabaseManager
+import logging
 
-def prompt_for_password():
+def prompt_for_password(root):
     """Popup dialog for entering or creating the master password."""
-    root = tk.Tk()
+    # Root window is already created and passed in
     root.withdraw()
 
     # Check if password file exists
@@ -20,9 +21,12 @@ def prompt_for_password():
         messagebox.showinfo("Setup Required", "No password found. Please set a new master password.")
         while True:
             password = simpledialog.askstring("Set Master Password", "Enter a strong password:", show="*", parent=root)
-            confirm_password = simpledialog.askstring("Confirm Password", "Re-enter password:", show="*", parent=root)
+            if not password:
+                messagebox.showerror("Error", "Password cannot be empty.", parent=root)
+                continue
 
-            if not password or not confirm_password:
+            confirm_password = simpledialog.askstring("Confirm Password", "Re-enter password:", show="*", parent=root)
+            if not confirm_password:
                 messagebox.showerror("Error", "Password cannot be empty.", parent=root)
                 continue
 
@@ -33,47 +37,40 @@ def prompt_for_password():
             # Store the hashed password securely
             EncryptionManager.store_password_hash(password)
             messagebox.showinfo("Success", "Master password set successfully!", parent=root)
-            break
+            root.deiconify()  # Show the main window
+            return password
 
     # If password file exists, prompt for authentication
     for _ in range(3):  # Limit to 3 attempts
         password = simpledialog.askstring("Authentication", "Enter Master Password:", show="*", parent=root)
+        
+        if not password:
+            # User clicked Cancel
+            return None
 
-        if password and EncryptionManager.verify_password(password):
+        if EncryptionManager.verify_password(password):
+            root.deiconify()  # Show the main window
             return password  # Correct password entered
 
         messagebox.showerror("Error", "Incorrect password. Try again.", parent=root)
 
     messagebox.showerror("Error", "Too many failed attempts. Exiting.", parent=root)
-    exit(1)
-
-
-    # Now, prompt for authentication
-    for _ in range(3):
-        password = simpledialog.askstring("Authentication", "Enter Master Password:", show="*", parent=root)
-
-        if password and EncryptionManager.verify_password(password):
-            root.destroy()
-            return password
-
-        messagebox.showerror("Error", "Incorrect password. Try again.", parent=root)
-
-    messagebox.showerror("Error", "Too many failed attempts. Exiting.", parent=root)
-    root.destroy()
-    exit(1)
+    return None
 
 def start_gui(db_manager):
     """Launch the GUI after password verification."""
-    password = prompt_for_password()
+    # Create a root window that persists for the password dialog
+    root = tb.Window(themename=config.THEME)
+    
+    password = prompt_for_password(root)
     if not password:
+        root.destroy()
         return
 
     encryption_manager = EncryptionManager(password)
     db_manager.enc = encryption_manager  # Assign encryption manager to db_manager
 
-    root = tb.Window(themename=config.THEME)
-    tb.Style().theme_use(config.THEME)
-
+    # Use the existing root window instead of creating a new one
     app = IPAMApp(root, db_manager)
     root.mainloop()
 
@@ -176,9 +173,19 @@ class IPAMApp:
         tree_frame = ttk.Frame(self.frame2)
         tree_frame.pack(fill="both", expand=True, pady=config.WIDGET_PADDING)
 
-        self.tree = ttk.Treeview(tree_frame, columns=(
-            "ID", "CIDR", "Note", "Cust", "Cust Email", "Dev Type", "CGW IP"
-        ), show="headings", style="Treeview")
+        # Create scrollbar first
+        y_scroll = ttk.Scrollbar(tree_frame, orient="vertical")
+        y_scroll.pack(side="right", fill="y")
+
+        # Create the Treeview with the scrollbar
+        self.tree = ttk.Treeview(
+            tree_frame, 
+            columns=("ID", "CIDR", "Note", "Cust", "Cust Email", "Dev Type", "CGW IP"),
+            show="headings", 
+            style="Treeview",
+            yscrollcommand=y_scroll.set
+        )
+        y_scroll.config(command=self.tree.yview)
 
         # Define column widths
         column_widths = {
@@ -200,11 +207,6 @@ class IPAMApp:
 
         # Add double-click binding
         self.tree.bind("<Double-1>", self.on_double_click)
-
-        # Scrollbar
-        y_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=y_scroll.set)
-        y_scroll.pack(side="right", fill="y")
 
         self.tree.pack(fill="both", expand=True)
 
@@ -468,7 +470,12 @@ class IPAMApp:
         self.root.destroy()  # Destroy all Tkinter windows
 
 if __name__ == "__main__":
-    #root = tk.Tk()
-    #app = IPAMApp(root)
-    #root.mainloop()
+    # This code only runs when gui.py is executed directly
+    from db import DatabaseManager
+    import config
+    
+    # Create a database manager with no encryption manager yet
+    db_manager = DatabaseManager(config.DATABASE_PATH, None)
+    
+    # Start the GUI with the database manager
     start_gui(db_manager)

@@ -70,7 +70,9 @@ class EncryptionManager:
             iv, tag, ciphertext = raw_data[:12], raw_data[12:28], raw_data[28:]
             cipher = Cipher(algorithms.AES(self.key), modes.GCM(iv, tag), backend=default_backend())
             decryptor = cipher.decryptor()
-            return decryptor.update(ciphertext) + decryptor.finalize()
+            decrypted_bytes = decryptor.update(ciphertext) + decryptor.finalize()
+            # Properly decode bytes to string
+            return decrypted_bytes.decode('utf-8')
         except Exception:
             return "DECRYPTION_ERROR"  # Prevent revealing partial data
 
