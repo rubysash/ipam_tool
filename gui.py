@@ -102,7 +102,7 @@ class IPAMApp:
         tree_frame.pack(fill="both", expand=True, pady=config.WIDGET_PADDING)
 
         self.tree = ttk.Treeview(tree_frame, columns=(
-            "ID", "CIDR", "Note", "Cust", "Cust Email", "Dev IP", "CGW IP"
+            "ID", "CIDR", "Note", "Cust", "Cust Email", "Dev Type", "CGW IP"
         ), show="headings", style="Treeview")
 
         # Configure column headers
