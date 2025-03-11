@@ -57,7 +57,7 @@ class IPAMApp:
         
         # Initialize database and search handlers
         self.db = DatabaseManager(config.DATABASE_PATH)
-        self.search_handler = SearchHandler(self.perform_search)
+        self.search_handler = SearchHandler(self.perform_gui_search)
         
         # Initialize sorting variables
         self.sort_column = None
@@ -90,7 +90,7 @@ class IPAMApp:
         self.search_var = tk.StringVar()
         self.search_entry = ttk.Entry(self.frame0, textvariable=self.search_var, font=config.ENTRY_FONT)
         self.search_entry.pack(fill="x", expand=True, padx=config.WIDGET_PADDING, pady=config.WIDGET_PADDING)
-        self.search_entry.bind("<KeyRelease>", self.on_search_input)
+        self.search_entry.bind("<KeyRelease>", self.handle_gui_search_input)
 
         # Flash Message
         self.flash_message = ttk.Label(self.frame1, text="", foreground="red", font=config.MESSAGE_FONT, wraplength=550)
@@ -262,12 +262,12 @@ class IPAMApp:
         self.flash_message.config(text=message, foreground=colors.get(status, "black"))
         self.root.after(config.FLASH_TIME, lambda: self.flash_message.config(text=""))
 
-    def on_search_input(self, event):
+    def handle_gui_search_input(self, event):
         """ Trigger search logic with delay """
         query = self.search_var.get()
-        self.search_handler.trigger_search(query)
+        self.search_handler.schedule_search(query)
 
-    def perform_search(self, query=""):
+    def perform_gui_search(self, query=""):
         """Fetch search results from the database and update Treeview."""
         for row in self.tree.get_children():
             self.tree.delete(row)
@@ -278,7 +278,6 @@ class IPAMApp:
                 subnet["id"], subnet["cidr"], subnet["note"], subnet["cust"],
                 subnet["cust_email"], subnet["dev_type"], subnet["cgw_ip"]
             ))
-
 
     def load_subnets(self):
         """ Load subnets into the Treeview, masking passwords. """

@@ -19,7 +19,7 @@ class SearchHandler:
         self.search_query = ""
         self.lock = threading.Lock()
 
-    def trigger_search(self, query):
+    def schedule_search(self, query):
         """
         Start a timer for search execution.
 
@@ -32,10 +32,10 @@ class SearchHandler:
         if self.search_thread and self.search_thread.is_alive():
             return  # Avoid creating multiple threads
 
-        self.search_thread = threading.Thread(target=self.perform_search, daemon=True)
+        self.search_thread = threading.Thread(target=self.execute_delayed_search, daemon=True)
         self.search_thread.start()
 
-    def perform_search(self):
+    def execute_delayed_search(self):
         """
         Execute the actual search when timer expires.
         Ensures only the latest query is executed.
