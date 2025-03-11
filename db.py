@@ -1,18 +1,19 @@
 import sqlite3
-
+from encryption import EncryptionManager 
 
 class DatabaseManager:
     """ Handles all database interactions for IPAM """
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, encryption_manager):
         """ Initialize database connection """
         self.db_path = db_path
+        self.enc = encryption_manager
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.initialize_db()
 
     def initialize_db(self):
-        """ Create necessary tables if they don't exist and add new columns if missing. """
+        """ Create necessary tables if they don't exist. """
         try:
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS subnets (
@@ -34,66 +35,75 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Database error during initialization: {e}")
 
-    def add_subnet(self, cidr, note, cust=None, cust_email=None, dev_type=None,
-                dev_ip=None, dev_user=None, dev_pass=None, cgw_ip=None, vpn1_psk=None, vpn2_psk=None):
-        """ Add a subnet with all fields """
-        try:
-            self.cursor.execute("""
-                INSERT INTO subnets (cidr, note, cust, cust_email, dev_type, dev_ip, 
-                                    dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (cidr, note, cust, cust_email, dev_type, dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk))
-            self.conn.commit()
-        except sqlite3.IntegrityError:
-            print(f"Error: Subnet {cidr} already exists.")
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
-
     def delete_subnet(self, subnet_id):
-        """ Delete a subnet by its ID instead of CIDR """
+        """ Delete a subnet by its ID """
         try:
             self.cursor.execute("DELETE FROM subnets WHERE id = ?", (subnet_id,))
             self.conn.commit()
         except sqlite3.Error as e:
             print(f"Database error: {e}")
 
-    def update_subnet(self, subnet_id, cidr, note, cust, cust_email, dev_type,
-                    dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk):
-        """ Update subnet details """
+    def add_subnet(self, cidr, note, cust, cust_email, dev_type, dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk):
+        """Encrypt and add a subnet."""
+        try:
+            self.cursor.execute("""
+                INSERT INTO subnets (cidr, note, cust, cust_email, dev_type, dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                self.enc.encrypt(cidr), self.enc.encrypt(note), self.enc.encrypt(cust), self.enc.encrypt(cust_email),
+                self.enc.encrypt(dev_type), self.enc.encrypt(dev_ip), self.enc.encrypt(dev_user), self.enc.encrypt(dev_pass),
+                self.enc.encrypt(cgw_ip), self.enc.encrypt(vpn1_psk), self.enc.encrypt(vpn2_psk)
+            ))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+
+    def update_subnet(self, subnet_id, cidr, note, cust, cust_email, dev_type, dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk):
+        """Encrypt and update subnet details."""
         try:
             self.cursor.execute("""
                 UPDATE subnets SET cidr = ?, note = ?, cust = ?, cust_email = ?, dev_type = ?, 
                 dev_ip = ?, dev_user = ?, dev_pass = ?, cgw_ip = ?, vpn1_psk = ?, vpn2_psk = ? 
                 WHERE id = ?
-            """, (cidr, note, cust, cust_email, dev_type, dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk, subnet_id))
+            """, (
+                self.enc.encrypt(cidr), self.enc.encrypt(note), self.enc.encrypt(cust), self.enc.encrypt(cust_email),
+                self.enc.encrypt(dev_type), self.enc.encrypt(dev_ip), self.enc.encrypt(dev_user), self.enc.encrypt(dev_pass),
+                self.enc.encrypt(cgw_ip), self.enc.encrypt(vpn1_psk), self.enc.encrypt(vpn2_psk), subnet_id
+            ))
             self.conn.commit()
         except sqlite3.Error as e:
             print(f"Database error: {e}")
 
-    def search_subnets(self, query):
-        """ Search for subnets by relevant displayed fields """
+    def get_all_subnets(self):
+        """Retrieve all subnets and decrypt fields before returning."""
         try:
-            self.cursor.execute(
-                """SELECT id, cidr, note, cust, cust_email, dev_type, cgw_ip 
-                FROM subnets 
-                WHERE cidr LIKE ? OR note LIKE ? OR cust LIKE ? OR cust_email LIKE ? 
-                OR dev_type LIKE ? OR cgw_ip LIKE ?""",
-                (f"%{query}%",) * 6,
-            )
+            self.cursor.execute("SELECT * FROM subnets")
             columns = [desc[0] for desc in self.cursor.description]
-            return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+            decrypted_subnets = []
+
+            for row in self.cursor.fetchall():
+                try:
+                    decrypted_entry = {
+                        col: self.enc.decrypt(row[i])
+                        if col not in ["id"] and row[i] is not None else row[i]
+                        for i, col in enumerate(columns)
+                    }
+                    decrypted_subnets.append(decrypted_entry)
+                except Exception as e:
+                    print(f"Decryption error: {e}")
+
+            return decrypted_subnets
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             return []
 
-    def get_all_subnets(self):
-        """ Retrieve all subnets with new fields """
+    def search_subnets(self, query):
+        """Retrieve subnets and search locally after decrypting."""
         try:
-            self.cursor.execute("SELECT * FROM subnets")
-            columns = [desc[0] for desc in self.cursor.description]
-            return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
+            all_subnets = self.get_all_subnets()
+            return [subnet for subnet in all_subnets if query.lower() in str(subnet.values()).lower()]
+        except Exception as e:
+            print(f"Search error: {e}")
             return []
 
     def close(self):

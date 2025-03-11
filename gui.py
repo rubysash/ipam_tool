@@ -1,24 +1,93 @@
 # gui.py
+import os
 import tkinter as tk
-from tkinter import ttk, messagebox
 import ttkbootstrap as tb
-from search import SearchHandler
-from db import DatabaseManager
-from utils import Utils
-import config
+from tkinter import ttk, messagebox, simpledialog
 import ipaddress
+import config
+from search import SearchHandler
+from utils import Utils
+from encryption import EncryptionManager
+from db import DatabaseManager
+
+def prompt_for_password():
+    """Popup dialog for entering or creating the master password."""
+    root = tk.Tk()
+    root.withdraw()
+
+    # Check if password file exists
+    if not os.path.exists(config.PASSWORD_FILE):
+        messagebox.showinfo("Setup Required", "No password found. Please set a new master password.")
+        while True:
+            password = simpledialog.askstring("Set Master Password", "Enter a strong password:", show="*", parent=root)
+            confirm_password = simpledialog.askstring("Confirm Password", "Re-enter password:", show="*", parent=root)
+
+            if not password or not confirm_password:
+                messagebox.showerror("Error", "Password cannot be empty.", parent=root)
+                continue
+
+            if password != confirm_password:
+                messagebox.showerror("Error", "Passwords do not match. Try again.", parent=root)
+                continue
+
+            # Store the hashed password securely
+            EncryptionManager.store_password_hash(password)
+            messagebox.showinfo("Success", "Master password set successfully!", parent=root)
+            break
+
+    # If password file exists, prompt for authentication
+    for _ in range(3):  # Limit to 3 attempts
+        password = simpledialog.askstring("Authentication", "Enter Master Password:", show="*", parent=root)
+
+        if password and EncryptionManager.verify_password(password):
+            return password  # Correct password entered
+
+        messagebox.showerror("Error", "Incorrect password. Try again.", parent=root)
+
+    messagebox.showerror("Error", "Too many failed attempts. Exiting.", parent=root)
+    exit(1)
+
+
+    # Now, prompt for authentication
+    for _ in range(3):
+        password = simpledialog.askstring("Authentication", "Enter Master Password:", show="*", parent=root)
+
+        if password and EncryptionManager.verify_password(password):
+            root.destroy()
+            return password
+
+        messagebox.showerror("Error", "Incorrect password. Try again.", parent=root)
+
+    messagebox.showerror("Error", "Too many failed attempts. Exiting.", parent=root)
+    root.destroy()
+    exit(1)
+
+def start_gui(db_manager):
+    """Launch the GUI after password verification."""
+    password = prompt_for_password()
+    if not password:
+        return
+
+    encryption_manager = EncryptionManager(password)
+    db_manager.enc = encryption_manager  # Assign encryption manager to db_manager
+
+    root = tb.Window(themename=config.THEME)
+    tb.Style().theme_use(config.THEME)
+
+    app = IPAMApp(root, db_manager)
+    root.mainloop()
 
 class IPAMApp:
     """ Main IPAM GUI Application """
 
-    def __init__(self, root):
+    def __init__(self, root, db_manager):
         """ Initialize the GUI layout """
         self.root = root
+        self.db = db_manager 
+        self.style = tb.Style()
+        self.style.theme_use(config.THEME)  # Apply Darkly or any other theme
         self.root.title(f"IP Address Management (IPAM) v{config.VERSION}")
         self.root.geometry("1150x750")
-        
-        # Initialize style before setting any widget configurations
-        self.style = tb.Style(config.THEME)
         
         # Configure base styles for different widget types
         self.style.configure("TLabel", font=config.LABEL_FONT)
@@ -56,13 +125,16 @@ class IPAMApp:
                             padding=config.WIDGET_PADDING)
         
         # Initialize database and search handlers
-        self.db = DatabaseManager(config.DATABASE_PATH)
+        #self.db = DatabaseManager(config.DATABASE_PATH)
         self.search_handler = SearchHandler(self.perform_gui_search)
         
         # Initialize sorting variables
         self.sort_column = None
         self.sort_reverse = False
-        
+
+        # Close resources on exit
+        self.root.protocol("WM_DELETE_WINDOW", self.cleanup_and_exit)
+
         # Setup UI components
         self.setup_frames()
         self.setup_widgets()
@@ -280,17 +352,15 @@ class IPAMApp:
             ))
 
     def load_subnets(self):
-        """ Load subnets into the Treeview, masking passwords. """
+        """Load subnets into the Treeview with decrypted data"""
         for row in self.tree.get_children():
             self.tree.delete(row)
 
-        subnets = self.db.get_all_subnets()
+        subnets = self.db.get_all_subnets()  # Already decrypted
         for subnet in subnets:
-            masked_pass = "*****" if subnet["dev_pass"] else ""
             self.tree.insert("", "end", values=(
                 subnet["id"], subnet["cidr"], subnet["note"], subnet["cust"], subnet["cust_email"],
-                subnet["dev_type"], subnet["dev_ip"], subnet["dev_user"], masked_pass, 
-                subnet["cgw_ip"], subnet["vpn1_psk"], subnet["vpn2_psk"]
+                subnet["dev_type"], subnet["cgw_ip"]
             ))
 
     def open_modify_popup(self, prefill_cidr=None, is_new_record=False):
@@ -388,8 +458,17 @@ class IPAMApp:
 
         ttk.Button(popup, text="Save", command=save_changes, style="TButton").pack(pady=10)
 
+    def cleanup_and_exit(self):
+        """ Ensure database is closed and application exits cleanly """
+        print("Closing database connection...")
+        self.db.close()
+
+        # Ensure all running threads (like search) are stopped
+        self.root.quit()  # Stop the Tkinter main loop
+        self.root.destroy()  # Destroy all Tkinter windows
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = IPAMApp(root)
-    root.mainloop()
+    #root = tk.Tk()
+    #app = IPAMApp(root)
+    #root.mainloop()
+    start_gui(db_manager)

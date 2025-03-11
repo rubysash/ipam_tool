@@ -14,6 +14,24 @@ A Python-based IP Address Management system for tracking and managing private ne
 - Automatic next subnet suggestion
 - Dark mode interface using ttkbootstrap
 - SQLite database for persistent storage
+- **AES-256-GCM encryption for sensitive data**
+- **Master password authentication for database access**
+- **Secure password storage with PBKDF2 hashing**
+
+## Security and Encryption
+
+This tool implements **AES-256-GCM encryption** to protect sensitive information such as customer details, device credentials, and VPN keys. The encryption process follows these principles:
+
+- A **master password** is required upon startup for decryption.
+- **PBKDF2-HMAC-SHA256** is used for key derivation with a 200,000 iteration count.
+- A **random 16-byte salt** is stored securely and used for key generation.
+- **AES-GCM mode** provides both encryption and authentication.
+- Encrypted fields include:
+  - Device usernames and passwords
+  - VPN pre-shared keys
+  - Customer-specific sensitive data
+- Secure password storage follows industry best practices with a unique per-installation salt.
+
 
 ## Prerequisites
 
@@ -23,6 +41,8 @@ A Python-based IP Address Management system for tracking and managing private ne
   - ipaddress==1.0.23
   - pillow==11.1.0
   - ttkbootstrap==1.10.1
+  - colorama==0.4.6
+  - cryptography (for encryption)
 
 ## Installation
 
@@ -105,7 +125,8 @@ The `config.py` file contains customizable settings:
 ```
 ipam_project/
 ├── config.py         # Configuration settings
-├── db.py             # Database management
+├── db.py             # Database management with encryption
+├── encryption.py     # AES-256-GCM encryption and password hashing
 ├── gui.py            # Main GUI application
 ├── my_logging.py     # Global Logging configuration
 ├── main.py           # Application entry point
@@ -121,6 +142,12 @@ ipam_project/
 - Subnet conflict detection
 - Error handling and logging
 
+## Encryption
+
+- AES-256-GCM encryption for sensitive data
+- Master password authentication
+- PBKDF2 password hashing with salt
+    
 ## Contributing
 
 1. Fork the repository

@@ -1,8 +1,11 @@
 # Database File Path
 DATABASE_PATH = "ipam_data.db"
 
+# Encrypted, still needs password to unlock
+PASSWORD_FILE = "db_password.key"
+
 # Search Delay (seconds)
-SEARCH_DELAY = 3
+SEARCH_DELAY = 2
 
 # ttkbootstrap Theme  
 # https://ttkbootstrap.readthedocs.io/en/latest/themes/dark/
@@ -29,4 +32,4 @@ LOG_LEVEL = "INFO"
 # Flash period
 FLASH_TIME = 5000
 
-VERSION = .03
+VERSION = .04
