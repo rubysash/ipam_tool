@@ -1,11 +1,13 @@
 import os
 import base64
 import hashlib
+from typing import Tuple
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import config
+import logging
 
 
 class EncryptionManager:
@@ -67,25 +69,61 @@ class EncryptionManager:
 
         try:
             raw_data = base64.b64decode(encrypted_text)
+            if len(raw_data) < 28:  # IV(12) + Tag(16) + minimum ciphertext
+                return "DECRYPTION_ERROR"
+                
             iv, tag, ciphertext = raw_data[:12], raw_data[12:28], raw_data[28:]
             cipher = Cipher(algorithms.AES(self.key), modes.GCM(iv, tag), backend=default_backend())
             decryptor = cipher.decryptor()
             decrypted_bytes = decryptor.update(ciphertext) + decryptor.finalize()
             # Properly decode bytes to string
             return decrypted_bytes.decode('utf-8')
-        except Exception:
+        except Exception as e:
+            logging.error(f"Decryption error: {str(e)}")
             return "DECRYPTION_ERROR"  # Prevent revealing partial data
 
     @staticmethod
     def store_password_hash(password):
-        """Securely store the hashed password with a random salt."""
-        salt = os.urandom(16)  # Generate a new random salt
-        hashed_password = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 200000)
+        """
+        Securely store the hashed password with a random salt.
+        Also validates password strength.
         
-        # Store salt + hash together
-        stored_value = base64.b64encode(salt + hashed_password).decode()
-        with open(config.PASSWORD_FILE, "w") as f:
-            f.write(stored_value)
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        try:
+            # Validate password strength
+            if len(password) < 14:
+                return False, "Password must be at least 14 characters long"
+                
+            has_uppercase = any(c.isupper() for c in password)
+            has_lowercase = any(c.islower() for c in password)
+            has_digit = any(c.isdigit() for c in password)
+            has_special = any(not c.isalnum() for c in password)
+            
+            if not has_uppercase:
+                return False, "Password must contain at least one uppercase letter"
+                
+            if not has_lowercase:
+                return False, "Password must contain at least one lowercase letter"
+                
+            if not has_digit:
+                return False, "Password must contain at least one digit"
+                
+            if not has_special:
+                return False, "Password must contain at least one special character"
+            
+            salt = os.urandom(16)  # Generate a new random salt
+            hashed_password = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 200000)
+            
+            # Store salt + hash together
+            stored_value = base64.b64encode(salt + hashed_password).decode()
+            with open(config.PASSWORD_FILE, "w") as f:
+                f.write(stored_value)
+                
+            return True, ""
+        except Exception as e:
+            return False, f"Error storing password: {str(e)}"
 
     @staticmethod
     def verify_password(password):
@@ -103,3 +141,36 @@ class EncryptionManager:
         computed_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 200000)
 
         return computed_hash == stored_hash
+
+    @staticmethod
+    def validate_password_strength(password: str) -> Tuple[bool, str]:
+        """
+        Validates password strength against security policy.
+        
+        Args:
+            password: The password to validate
+            
+        Returns:
+            Tuple[bool, str]: (is_valid, error_message)
+        """
+        if len(password) < 14:
+            return False, "Password must be at least 14 characters long"
+            
+        has_uppercase = any(c.isupper() for c in password)
+        has_lowercase = any(c.islower() for c in password)
+        has_digit = any(c.isdigit() for c in password)
+        has_special = any(not c.isalnum() for c in password)
+        
+        if not has_uppercase:
+            return False, "Password must contain at least one uppercase letter"
+            
+        if not has_lowercase:
+            return False, "Password must contain at least one lowercase letter"
+            
+        if not has_digit:
+            return False, "Password must contain at least one digit"
+            
+        if not has_special:
+            return False, "Password must contain at least one special character"
+            
+        return True, ""

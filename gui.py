@@ -10,6 +10,7 @@ from utils import Utils
 from encryption import EncryptionManager
 from db import DatabaseManager
 import logging
+import threading
 
 def prompt_for_password(root):
     """Popup dialog for entering or creating the master password."""
@@ -18,11 +19,17 @@ def prompt_for_password(root):
 
     # Check if password file exists
     if not os.path.exists(config.PASSWORD_FILE):
-        messagebox.showinfo("Setup Required", "No password found. Please set a new master password.")
+        messagebox.showinfo("Setup Required", "No password found. Please set a new master password.", parent=root)
         while True:
-            password = simpledialog.askstring("Set Master Password", "Enter a strong password:", show="*", parent=root)
+            password = simpledialog.askstring("Set Master Password", "Enter a strong password:\n• At least 14 characters\n• At least one uppercase letter\n• At least one lowercase letter\n• At least one digit\n• At least one special character", show="*", parent=root)
             if not password:
                 messagebox.showerror("Error", "Password cannot be empty.", parent=root)
+                continue
+
+            # Validate password strength
+            is_valid, error_message = EncryptionManager.validate_password_strength(password)
+            if not is_valid:
+                messagebox.showerror("Error", error_message, parent=root)
                 continue
 
             confirm_password = simpledialog.askstring("Confirm Password", "Re-enter password:", show="*", parent=root)
@@ -35,7 +42,11 @@ def prompt_for_password(root):
                 continue
 
             # Store the hashed password securely
-            EncryptionManager.store_password_hash(password)
+            success, error_msg = EncryptionManager.store_password_hash(password)
+            if not success:
+                messagebox.showerror("Error", error_msg, parent=root)
+                continue
+                
             messagebox.showinfo("Success", "Master password set successfully!", parent=root)
             root.deiconify()  # Show the main window
             return password
@@ -227,8 +238,9 @@ class IPAMApp:
         subnet_combo = ttk.Combobox(subnet_frame, textvariable=self.subnet_size_var, values=subnet_sizes, state="readonly", width=4, font=config.BUTTON_FONT)
         subnet_combo.pack(side="left", padx=5)
         
-        # Add AWS Export button
+        # Utils
         ttk.Button(btn_frame, text="AWS Export", command=self.export_aws_secrets, style="TButton").pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Master Pass", command=self.change_master_password, style="TButton").pack(side="left", padx=5)
 
         self.load_subnets()
         self.sort_treeview("CIDR")
@@ -321,9 +333,16 @@ class IPAMApp:
         data = [(self.tree.item(item, "values"), item) for item in self.tree.get_children("")]
 
         if column == "CIDR":
-            key_func = lambda x: ipaddress.ip_network(x[0][1], strict=False)
-        else:  # "Note"
-            key_func = lambda x: x[0][2].lower()
+            def key_func(x):
+                try:
+                    if x[0][1] == "DECRYPTION_ERROR":
+                        return ipaddress.ip_network("0.0.0.0/0", strict=False)  # Default for errors
+                    return ipaddress.ip_network(x[0][1], strict=False)
+                except (ValueError, TypeError):
+                    # Handle invalid CIDR format by placing at the top
+                    return ipaddress.ip_network("0.0.0.0/0", strict=False)
+        else:  # "Note" or other columns
+            key_func = lambda x: str(x[0][2]).lower() if x[0][2] else ""
 
         self.sort_reverse = not self.sort_reverse if self.sort_column == column else False
         self.sort_column = column
@@ -473,6 +492,193 @@ class IPAMApp:
                 self.update_flash_message("Secrets exported successfully", "success")
         except Exception as e:
             self.update_flash_message(f"Error exporting secrets: {str(e)}", "error")
+
+    def change_master_password(self):
+        """Handle changing the master password and re-encrypting database"""
+        # Create a dialog for password change
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Change Master Password")
+        dialog.geometry("550x450")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        
+        # Create frame for password fields
+        frame = ttk.Frame(dialog, padding=config.FRAME_PADDING)
+        frame.pack(fill="both", expand=True)
+        
+        # Password entries
+        ttk.Label(frame, text="Current Password:", font=config.LABEL_FONT).grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        current_pass = ttk.Entry(frame, font=config.ENTRY_FONT, show="*")
+        current_pass.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+        
+        ttk.Label(frame, text="New Password:", font=config.LABEL_FONT).grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        new_pass = ttk.Entry(frame, font=config.ENTRY_FONT, show="*")
+        new_pass.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+        
+        ttk.Label(frame, text="Confirm Password:", font=config.LABEL_FONT).grid(row=2, column=0, padx=10, pady=10, sticky="w")
+        confirm_pass = ttk.Entry(frame, font=config.ENTRY_FONT, show="*")
+        confirm_pass.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
+        
+        # Password requirements 
+        req_text = "Password requirements:\n• Minimum 14 characters\n• At least one uppercase letter\n• At least one lowercase letter\n• At least one number\n• At least one special character"
+        requirements = ttk.Label(frame, text=req_text, font=(config.FONT_FAMILY, 10), foreground="gray")
+        requirements.grid(row=3, column=0, columnspan=2, sticky="w", padx=10)
+        
+        # Status message
+        status_var = tk.StringVar()
+        status = ttk.Label(frame, textvariable=status_var, font=config.MESSAGE_FONT, foreground="red")
+        status.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
+        
+        frame.columnconfigure(1, weight=1)
+        
+        def validate_and_change():
+            """Validate password inputs and initiate password change"""
+            current = current_pass.get()
+            new = new_pass.get()
+            confirm = confirm_pass.get()
+            
+            # Verify current password
+            if not EncryptionManager.verify_password(current):
+                status_var.set("Current password is incorrect")
+                return
+            
+            # Validate new password strength
+            is_valid, error_msg = EncryptionManager.validate_password_strength(new)
+            if not is_valid:
+                status_var.set(error_msg)
+                return
+                
+            # Check if passwords match
+            if new != confirm:
+                status_var.set("New passwords do not match")
+                return
+                
+            # Close dialog and proceed with password change
+            dialog.destroy()
+            self._perform_password_change(current, new)
+        
+        # Add buttons
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=5, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side="left", padx=10)
+        ttk.Button(button_frame, text="Change", command=validate_and_change).pack(side="left", padx=10)
+        
+        # Set focus to current password field
+        current_pass.focus_set()
+
+    def _perform_password_change(self, old_password, new_password):
+        """Re-encrypt database with new master password"""
+        import threading
+        
+        # Create progress dialog
+        progress_dialog = tk.Toplevel(self.root)
+        progress_dialog.title("Changing Master Password")
+        progress_dialog.geometry("400x150")
+        progress_dialog.transient(self.root)
+        progress_dialog.grab_set()
+        progress_dialog.resizable(False, False)
+        progress_dialog.protocol("WM_DELETE_WINDOW", lambda: None)  # Prevent closing
+        
+        # Create frame for progress
+        frame = ttk.Frame(progress_dialog, padding=config.FRAME_PADDING)
+        frame.pack(fill="both", expand=True)
+        
+        # Progress message
+        message_var = tk.StringVar(value="Re-encrypting database with new password...")
+        message = ttk.Label(frame, textvariable=message_var, font=config.MESSAGE_FONT)
+        message.pack(pady=10)
+        
+        # Progress bar
+        progress = ttk.Progressbar(frame, mode="indeterminate")
+        progress.pack(fill="x", padx=20, pady=10)
+        progress.start(10)
+        
+        # Disable the main application while processing
+        self.root.attributes("-disabled", True)
+        
+        def process_password_change():
+            """Thread function to handle re-encryption"""
+            try:
+                # Set up old encryption manager
+                old_encryption_manager = EncryptionManager(old_password)
+                
+                # Save original encryption manager in case we need to restore
+                original_encryption = self.db.enc
+                
+                # Get all existing data with old encryption
+                self.db.enc = old_encryption_manager
+                all_subnets = self.db.get_all_subnets()
+                
+                # Validate and store the new password hash
+                success, error_msg = EncryptionManager.validate_password_strength(new_password)
+                if not success:
+                    raise ValueError(error_msg)
+                    
+                # Store the new password hash
+                success, error_msg = EncryptionManager.store_password_hash(new_password)
+                if not success:
+                    raise ValueError(error_msg)
+                    
+                # Create new encryption manager
+                new_encryption_manager = EncryptionManager(new_password)
+                
+                # For each subnet, encrypt with new password and update the database
+                for subnet in all_subnets:
+                    subnet_id = subnet["id"]
+                    
+                    # Re-encrypt using the database manager's update method
+                    self.db.enc = new_encryption_manager  # Set the new encryption manager
+                    self.db.update_subnet(
+                        subnet_id, 
+                        subnet["cidr"], 
+                        subnet["note"], 
+                        subnet["cust"], 
+                        subnet["cust_email"],
+                        subnet["dev_type"], 
+                        subnet["dev_ip"], 
+                        subnet["dev_user"], 
+                        subnet["dev_pass"],
+                        subnet["cgw_ip"], 
+                        subnet["vpn1_psk"], 
+                        subnet["vpn2_psk"]
+                    )
+                
+                # Run final steps in the main thread
+                self.root.after(0, lambda: finish_password_change(True))
+                
+            except Exception as e:
+                # Log the error
+                logging.error(f"Error during password change: {str(e)}", exc_info=True)
+                
+                # Restore original encryption manager if available
+                if 'original_encryption' in locals():
+                    self.db.enc = original_encryption
+                    
+                # Run error handling in the main thread
+                self.root.after(0, lambda: finish_password_change(False, str(e)))
+        
+        def finish_password_change(success, error_msg=None):
+            """Finalize the password change process"""
+            # Re-enable the main application
+            self.root.attributes("-disabled", False)
+            
+            # Close the progress dialog
+            progress_dialog.destroy()
+            
+            if success:
+                self.update_flash_message("Master password changed successfully", "success")
+                # Reload the data with the new encryption
+                self.load_subnets()
+            else:
+                error_message = f"Failed to change password: {error_msg}"
+                self.update_flash_message(error_message, "error")
+                messagebox.showerror("Error", error_message)
+        
+        # Start the password change process in a separate thread
+        thread = threading.Thread(target=process_password_change, daemon=True)
+        thread.start()
 
     def cleanup_and_exit(self):
         """ Ensure database is closed and application exits cleanly """
