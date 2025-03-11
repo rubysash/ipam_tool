@@ -30,5 +30,21 @@ def setup_logging():
     logger.addHandler(console_handler)
 
 
+def get_logger(name=None):
+    """
+    Get a properly configured logger.
+    
+    Args:
+        name (str, optional): Logger name, typically __name__ from the calling module.
+            If None, returns the root logger.
+    
+    Returns:
+        logging.Logger: Configured logger instance
+    """
+    if name:
+        return logging.getLogger(name)
+    return logging.getLogger()
+
+
 # Initialize logging when the module is imported
 setup_logging()

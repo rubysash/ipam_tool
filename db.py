@@ -1,6 +1,7 @@
 import sqlite3
 import json
 from encryption import EncryptionManager 
+from my_logging import get_logger
 
 class DatabaseManager:
     """ Handles all database interactions for IPAM """
@@ -34,7 +35,7 @@ class DatabaseManager:
             """)
             self.conn.commit()
         except sqlite3.Error as e:
-            print(f"Database error during initialization: {e}")
+            logger.error("Database error during initialization: %s", e)
 
     def delete_subnet(self, subnet_id):
         """ Delete a subnet by its ID """
@@ -42,7 +43,7 @@ class DatabaseManager:
             self.cursor.execute("DELETE FROM subnets WHERE id = ?", (subnet_id,))
             self.conn.commit()
         except sqlite3.Error as e:
-            print(f"Database error: {e}")
+            logger.error("Database error: %s", e)
 
     def add_subnet(self, cidr, note, cust, cust_email, dev_type, dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk):
         """Encrypt and add a subnet."""
@@ -57,7 +58,7 @@ class DatabaseManager:
             ))
             self.conn.commit()
         except sqlite3.Error as e:
-            print(f"Database error: {e}")
+            logger.error("Database error: %s", e)
 
     def update_subnet(self, subnet_id, cidr, note, cust, cust_email, dev_type, dev_ip, dev_user, dev_pass, cgw_ip, vpn1_psk, vpn2_psk):
         """Encrypt and update subnet details."""
@@ -73,7 +74,7 @@ class DatabaseManager:
             ))
             self.conn.commit()
         except sqlite3.Error as e:
-            print(f"Database error: {e}")
+            logger.error("Database error: %s", e)
 
     def get_all_subnets(self):
         """Retrieve all subnets and decrypt fields before returning."""
@@ -91,11 +92,11 @@ class DatabaseManager:
                     }
                     decrypted_subnets.append(decrypted_entry)
                 except Exception as e:
-                    print(f"Decryption error: {e}")
+                    logger.error("Decryption error: %s", e)
 
             return decrypted_subnets
         except sqlite3.Error as e:
-            print(f"Database error: {e}")
+            logger.error("Database error: %s", e)
             return []
 
     def search_subnets(self, query):
@@ -104,7 +105,7 @@ class DatabaseManager:
             all_subnets = self.get_all_subnets()
             return [subnet for subnet in all_subnets if query.lower() in str(subnet.values()).lower()]
         except Exception as e:
-            print(f"Search error: {e}")
+            logger.error("Search error: %s", e)
             return []
 
     def export_secrets_aws_format(self):
@@ -120,8 +121,6 @@ class DatabaseManager:
                 # Skip entries without customer information
                 if not subnet['cust']:
                     continue
-                else:
-                    print(subnet['cust'])
                     
                 # Create prefix for keys based on customer and CIDR
                 prefix = f"{subnet['cust'].replace(' ', '_')}_{subnet['cidr'].replace('/', '_')}"
@@ -141,7 +140,7 @@ class DatabaseManager:
             
             return flat_secrets
         except Exception as e:
-            print(f"Error exporting secrets: {e}")
+            logger.error("Secrets Export error: %s", e)
             return {}
 
     def close(self):

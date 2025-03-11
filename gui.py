@@ -4,13 +4,16 @@ import tkinter as tk
 import ttkbootstrap as tb
 from tkinter import ttk, messagebox, simpledialog
 import ipaddress
+import threading
 import config
 from search import SearchHandler
 from utils import Utils
 from encryption import EncryptionManager
 from db import DatabaseManager
-import logging
-import threading
+from my_logging import get_logger
+
+# Get logger for this module
+logger = get_logger(__name__)
 
 def prompt_for_password(root):
     """Popup dialog for entering or creating the master password."""
@@ -48,6 +51,7 @@ def prompt_for_password(root):
                 continue
                 
             messagebox.showinfo("Success", "Master password set successfully!", parent=root)
+            logger.info("New master password created successfully")
             root.deiconify()  # Show the main window
             return password
 
@@ -61,11 +65,14 @@ def prompt_for_password(root):
 
         if EncryptionManager.verify_password(password):
             root.deiconify()  # Show the main window
+            logger.info("User authenticated successfully")
             return password  # Correct password entered
 
         messagebox.showerror("Error", "Incorrect password. Try again.", parent=root)
+        logger.warning("Failed authentication attempt")
 
     messagebox.showerror("Error", "Too many failed attempts. Exiting.", parent=root)
+    logger.warning("Authentication failed after multiple attempts")
     return None
 
 def start_gui(db_manager):
@@ -76,10 +83,12 @@ def start_gui(db_manager):
     password = prompt_for_password(root)
     if not password:
         root.destroy()
+        logger.info("Application exit - authentication cancelled or failed")
         return
 
     encryption_manager = EncryptionManager(password)
     db_manager.enc = encryption_manager  # Assign encryption manager to db_manager
+    logger.info("Encryption initialized successfully")
 
     # Use the existing root window instead of creating a new one
     app = IPAMApp(root, db_manager)

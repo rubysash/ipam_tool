@@ -7,8 +7,10 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import config
-import logging
+from my_logging import get_logger
 
+# Get logger for this module
+logger = get_logger(__name__)
 
 class EncryptionManager:
     """Handles AES-256-GCM encryption and decryption with PBKDF2 key derivation"""
@@ -79,7 +81,7 @@ class EncryptionManager:
             # Properly decode bytes to string
             return decrypted_bytes.decode('utf-8')
         except Exception as e:
-            logging.error(f"Decryption error: {str(e)}")
+            logger.error("Decryption error: %s", str(e))
             return "DECRYPTION_ERROR"  # Prevent revealing partial data
 
     @staticmethod

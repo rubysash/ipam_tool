@@ -1,6 +1,9 @@
 import re
 import ipaddress
+from my_logging import get_logger
 
+# Get logger for this module
+logger = get_logger(__name__)
 
 class Utils:
     """ Contains helper functions for validation """
@@ -84,7 +87,7 @@ class Utils:
             
             # Debug information
             num_secrets = len(secrets)
-            print(f"Found {num_secrets} secrets to export")
+            logger.debug("Found %s secrets to export", num_secrets)
             
             if not secrets:
                 if parent_window:
@@ -113,9 +116,10 @@ class Utils:
             if parent_window:
                 messagebox.showinfo("Export Success", f"Successfully exported {num_secrets} secrets to {file_path}")
             
+            logger.info("Successfully exported %s secrets to %s", num_secrets, file_path)
             return True
         except Exception as e:
             if parent_window:
                 messagebox.showerror("Export Error", f"Error exporting secrets: {str(e)}")
-            print(f"Error exporting secrets: {e}")
+            logger.error("Error exporting secrets: %s", e)
             return False
