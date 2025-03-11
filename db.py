@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from encryption import EncryptionManager 
 
 class DatabaseManager:
@@ -105,6 +106,43 @@ class DatabaseManager:
         except Exception as e:
             print(f"Search error: {e}")
             return []
+
+    def export_secrets_aws_format(self):
+        """
+        Export all secrets in a flat structure with customer name as key prefix.
+        Returns a dictionary with flat key-value pairs.
+        """
+        try:
+            all_subnets = self.get_all_subnets()
+            flat_secrets = {}
+            
+            for subnet in all_subnets:
+                # Skip entries without customer information
+                if not subnet['cust']:
+                    continue
+                else:
+                    print(subnet['cust'])
+                    
+                # Create prefix for keys based on customer and CIDR
+                prefix = f"{subnet['cust'].replace(' ', '_')}_{subnet['cidr'].replace('/', '_')}"
+                
+                # Add secrets to flat dictionary if they have values
+                if subnet['dev_user']:
+                    flat_secrets[f"{prefix}_dev_user"] = subnet['dev_user']
+                    
+                if subnet['dev_pass']:
+                    flat_secrets[f"{prefix}_dev_pass"] = subnet['dev_pass']
+                    
+                if subnet['vpn1_psk']:
+                    flat_secrets[f"{prefix}_vpn1_psk"] = subnet['vpn1_psk']
+                    
+                if subnet['vpn2_psk']:
+                    flat_secrets[f"{prefix}_vpn2_psk"] = subnet['vpn2_psk']
+            
+            return flat_secrets
+        except Exception as e:
+            print(f"Error exporting secrets: {e}")
+            return {}
 
     def close(self):
         """ Close the database connection """

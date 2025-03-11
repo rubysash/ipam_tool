@@ -226,6 +226,9 @@ class IPAMApp:
         subnet_sizes = [f"/{i}" for i in range(24, 31)]
         subnet_combo = ttk.Combobox(subnet_frame, textvariable=self.subnet_size_var, values=subnet_sizes, state="readonly", width=4, font=config.BUTTON_FONT)
         subnet_combo.pack(side="left", padx=5)
+        
+        # Add AWS Export button
+        ttk.Button(btn_frame, text="AWS Export", command=self.export_aws_secrets, style="TButton").pack(side="left", padx=5)
 
         self.load_subnets()
         self.sort_treeview("CIDR")
@@ -459,6 +462,17 @@ class IPAMApp:
             popup.destroy()
 
         ttk.Button(popup, text="Save", command=save_changes, style="TButton").pack(pady=10)
+
+    def export_aws_secrets(self):
+        """Handle AWS Secrets export button click"""
+        from utils import Utils
+        
+        try:
+            result = Utils.export_aws_secrets(self.db, self.root)
+            if result:
+                self.update_flash_message("Secrets exported successfully", "success")
+        except Exception as e:
+            self.update_flash_message(f"Error exporting secrets: {str(e)}", "error")
 
     def cleanup_and_exit(self):
         """ Ensure database is closed and application exits cleanly """

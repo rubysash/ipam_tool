@@ -60,3 +60,62 @@ class Utils:
     def validate_email(email: str) -> bool:
         """Validate email format."""
         return bool(re.fullmatch(r"[^@]+@[^@]+\.[a-zA-Z]{2,}", email))
+
+    @staticmethod
+    def export_aws_secrets(db_manager, parent_window=None):
+        """
+        Export all secrets in AWS Secrets Manager format to a file.
+        
+        Args:
+            db_manager: DatabaseManager instance with the database connection
+            parent_window: Parent window for file dialog
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            import json
+            import tkinter.filedialog as filedialog
+            from tkinter import messagebox
+            from datetime import datetime
+            
+            # Get secrets in AWS format
+            secrets = db_manager.export_secrets_aws_format()
+            
+            # Debug information
+            num_secrets = len(secrets)
+            print(f"Found {num_secrets} secrets to export")
+            
+            if not secrets:
+                if parent_window:
+                    messagebox.showinfo("Export Results", "No secrets found to export.")
+                return False
+            
+            # Generate default filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"ipam_secrets_{timestamp}.json"
+            
+            # Ask user where to save the file
+            file_path = filedialog.asksaveasfilename(
+                parent=parent_window,
+                defaultextension=".json",
+                initialfile=default_filename,
+                filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")]
+            )
+            
+            if not file_path:  # User cancelled
+                return False
+            
+            # Write secrets to file in JSON format
+            with open(file_path, 'w') as f:
+                json.dump(secrets, f, indent=2)
+            
+            if parent_window:
+                messagebox.showinfo("Export Success", f"Successfully exported {num_secrets} secrets to {file_path}")
+            
+            return True
+        except Exception as e:
+            if parent_window:
+                messagebox.showerror("Export Error", f"Error exporting secrets: {str(e)}")
+            print(f"Error exporting secrets: {e}")
+            return False
