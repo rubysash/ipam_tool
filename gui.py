@@ -311,22 +311,19 @@ class IPAMApp:
             row, col = divmod(i, 2)
             ttk.Label(form_frame, text=label_text, font=config.LABEL_FONT).grid(row=row, column=col * 2, padx=10, pady=5, sticky="w")
             
-            # Mask password field initially
-            show_value = "*" if key == "dev_pass" else ""
+            # Mask password and PSK fields initially
+            show_value = "*" if key in ["dev_pass", "vpn1_psk", "vpn2_psk"] else ""
             entry = ttk.Entry(form_frame, font=config.ENTRY_FONT, show=show_value)
             entry.grid(row=row, column=(col * 2) + 1, padx=10, pady=5, sticky="ew")
             entries[key] = entry
 
-            # Allow clicking to reveal password
-            if key == "dev_pass":
-                def toggle_password_visibility(e, entry=entry):
-                    """ Toggle password visibility when clicked """
-                    if entry.cget("show") == "*":
-                        entry.config(show="")  # Show the password
-                    else:
-                        entry.config(show="*")  # Mask the password again
+            # Allow clicking to reveal password fields
+            if key in ["dev_pass", "vpn1_psk", "vpn2_psk"]:
+                def toggle_visibility(e, entry=entry):
+                    """ Toggle field visibility when clicked """
+                    entry.config(show="" if entry.cget("show") == "*" else "*")
 
-                entry.bind("<Button-1>", toggle_password_visibility)
+                entry.bind("<Button-1>", toggle_visibility)
 
         form_frame.columnconfigure(1, weight=1)
         form_frame.columnconfigure(3, weight=1)
@@ -386,6 +383,7 @@ class IPAMApp:
             popup.destroy()
 
         ttk.Button(popup, text="Save", command=save_changes, style="TButton").pack(pady=10)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
