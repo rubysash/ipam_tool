@@ -15,7 +15,7 @@ class IPAMApp:
         """ Initialize the GUI layout """
         self.root = root
         self.root.title(f"IP Address Management (IPAM) v{config.VERSION}")
-        self.root.geometry("800x600")  # Increased for better readability with larger fonts
+        self.root.geometry("1024x800")
         
         # Initialize style before setting any widget configurations
         self.style = tb.Style(config.THEME)
@@ -102,8 +102,7 @@ class IPAMApp:
         tree_frame.pack(fill="both", expand=True, pady=config.WIDGET_PADDING)
 
         self.tree = ttk.Treeview(tree_frame, columns=(
-            "ID", "CIDR", "Note", "Cust", "Cust Email", "Dev Type", "Dev IP", 
-            "Dev User", "Dev Pass", "CGW IP", "VPN1 PSK", "VPN2 PSK"
+            "ID", "CIDR", "Note", "Cust", "Cust Email", "Dev IP", "CGW IP"
         ), show="headings", style="Treeview")
 
         # Configure column headers
@@ -112,7 +111,6 @@ class IPAMApp:
             self.tree.column(col, anchor="center", minwidth=100 if col != "ID" else 0)
 
         self.tree.column("ID", width=0, stretch=False)  # Hide ID column
-        self.tree.column("Dev Pass", minwidth=100, anchor="center")  # Password column
 
         # Add double-click binding
         self.tree.bind("<Double-1>", self.on_double_click)
@@ -141,157 +139,6 @@ class IPAMApp:
         subnet_combo = ttk.Combobox(subnet_frame, textvariable=self.subnet_size_var, values=subnet_sizes, state="readonly", width=4, font=config.BUTTON_FONT)
         subnet_combo.pack(side="left", padx=5)
 
-        self.load_subnets()
-        self.sort_treeview("CIDR")
-
-    def setup_widgets2(self):
-        """ Create search bar, messages, treeview, and modify button """
-        # Search Label and Entry
-        search_label = ttk.Label(self.frame0, text="Search:", font=config.LABEL_FONT)
-        search_label.pack(side="left", padx=config.WIDGET_PADDING)
-        
-        self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(
-            self.frame0, 
-            textvariable=self.search_var,
-            font=config.ENTRY_FONT
-        )
-        self.search_entry.pack(
-            fill="x", 
-            expand=True, 
-            padx=config.WIDGET_PADDING, 
-            pady=config.WIDGET_PADDING
-        )
-        self.search_entry.bind("<KeyRelease>", self.on_search_input)
-
-        # Flash Message
-        self.flash_message = ttk.Label(
-            self.frame1, 
-            text="", 
-            foreground="red",
-            font=config.MESSAGE_FONT,
-            wraplength=550  # Prevent text truncation
-        )
-        self.flash_message.pack(pady=config.WIDGET_PADDING)
-
-        # CIDR Blocks Label
-        header_label = ttk.Label(
-            self.frame2, 
-            text="Assigned CIDR Blocks",
-            font=config.HEADING_FONT
-        )
-        header_label.pack(
-            anchor="w", 
-            padx=config.WIDGET_PADDING, 
-            pady=config.WIDGET_PADDING
-        )
-
-        # Treeview Setup
-        tree_frame = ttk.Frame(self.frame2)
-        tree_frame.pack(fill="both", expand=True, pady=config.WIDGET_PADDING)
-
-        # Configure Treeview with specific font
-        style = ttk.Style()
-        style.configure(
-            "Treeview",
-            font=config.TREEVIEW_FONT,
-            rowheight=int(config.TREEVIEW_FONT[1] * 1.6)  # Scale row height with font
-        )
-        style.configure(
-            "Treeview.Heading",
-            font=config.TREEVIEW_FONT
-        )
-
-        self.tree = ttk.Treeview(
-            tree_frame,
-            columns=("ID", "CIDR", "Note"),
-            show="headings",
-            style="Treeview"
-        )
-        
-        # Add double-click binding
-        self.tree.bind("<Double-1>", self.on_double_click)
-
-        # Scrollbar
-        y_scroll = ttk.Scrollbar(
-            tree_frame, 
-            orient="vertical", 
-            command=self.tree.yview
-        )
-        self.tree.configure(yscrollcommand=y_scroll.set)
-        y_scroll.pack(side="right", fill="y")
-
-        # Configure columns
-        self.tree.heading("ID", text="ID")
-        self.tree.heading("CIDR", text="CIDR", 
-                        command=lambda: self.sort_treeview("CIDR"))
-        self.tree.heading("Note", text="Note", 
-                        command=lambda: self.sort_treeview("Note"))
-
-        self.tree.column("ID", width=0, stretch=False)
-        self.tree.column("CIDR", anchor="center", minwidth=150)
-        self.tree.column("Note", anchor="center", minwidth=200)
-
-        self.tree.pack(fill="both", expand=True)
-
-        # Initialize default sort
-        self.sort_column = "CIDR"
-        self.sort_reverse = True
-
-        # Button and Subnet Size Selection Frame
-        btn_frame = ttk.Frame(self.frame3)
-        btn_frame.pack(pady=config.FRAME_PADDING)
-
-        # Add button
-        ttk.Button(
-            btn_frame,
-            text="Add",
-            command=lambda: self.open_modify_popup(None, is_new_record=True),
-            style="success.TButton"
-        ).pack(side="left", padx=5)
-
-        # Modify button
-        ttk.Button(
-            btn_frame,
-            text="Modify",
-            command=self.open_modify_popup,
-            style="warning.TButton" 
-        ).pack(side="left", padx=5)
-
-        # Create a frame for subnet selection components
-        subnet_frame = ttk.Frame(btn_frame)
-        subnet_frame.pack(side="left", padx=5)
-
-        # Suggest Next button
-        ttk.Button(
-            subnet_frame,
-            text="Suggest Next",
-            command=self.suggest_next_subnet,
-            style="success.TButton"
-        ).pack(side="left")
-
-        # Subnet size dropdown
-        self.subnet_size_var = tk.StringVar(value="/28")
-        subnet_sizes = [f"/{i}" for i in range(24, 31)]
-        subnet_combo = ttk.Combobox(
-            subnet_frame,
-            textvariable=self.subnet_size_var,
-            values=subnet_sizes,
-            state="readonly",
-            width=4,
-            font=config.BUTTON_FONT,
-            style="Custom.TCombobox"
-        )
-        subnet_combo.pack(side="left", padx=(5, 5))
-
-        # Configure Combobox style to match button styling
-        self.style.configure(
-            "Custom.TCombobox",
-            font=config.BUTTON_FONT,
-            padding=config.WIDGET_PADDING
-        )
-
-        # Load and sort initial data
         self.load_subnets()
         self.sort_treeview("CIDR")
 
@@ -428,179 +275,83 @@ class IPAMApp:
                 subnet["cgw_ip"], subnet["vpn1_psk"], subnet["vpn2_psk"]
             ))
 
-    def open_modify_popup2(self, prefill_cidr=None, is_new_record=False):
-        """ Open a popup window for assigning/unassigning CIDR blocks """
-        popup = tk.Toplevel(self.root)
-        popup.title("Modify CIDR Assignment")
-        popup.geometry("400x300")
-        
-        # Configure popup padding
-        for child in popup.winfo_children():
-            child.grid_configure(padx=config.WIDGET_PADDING, 
-                            pady=config.WIDGET_PADDING)
-
-        # CIDR Label and Entry
-        ttk.Label(
-            popup,
-            text="CIDR",
-            font=config.LABEL_FONT
-        ).pack(pady=(config.WIDGET_PADDING, 2))
-        
-        cidr_entry = ttk.Entry(
-            popup,
-            font=config.ENTRY_FONT
-        )
-        cidr_entry.pack(padx=config.WIDGET_PADDING, 
-                    pady=(2, config.WIDGET_PADDING))
-
-        # Note Label and Entry
-        ttk.Label(
-            popup,
-            text="Note",
-            font=config.LABEL_FONT
-        ).pack(pady=(config.WIDGET_PADDING, 2))
-        
-        note_entry = ttk.Entry(
-            popup,
-            font=config.ENTRY_FONT
-        )
-        note_entry.pack(padx=config.WIDGET_PADDING, 
-                    pady=(2, config.WIDGET_PADDING))
-
-        # Only get selected item data if this is NOT a new record
-        selected_item = self.tree.selection() if not is_new_record else None
-        subnet_values = self.tree.item(selected_item)["values"] if selected_item else None
-
-        if subnet_values and not is_new_record:
-            subnet_id, cidr, note = subnet_values
-            cidr_entry.insert(0, cidr)
-            note_entry.insert(0, note)
-        else:
-            subnet_id = None
-            cidr_entry.insert(0, prefill_cidr if prefill_cidr else "")
-            note_entry.insert(0, "")
-
-        def save_changes(assign=True):
-            """ Assign or unassign CIDR block """
-            cidr = cidr_entry.get().strip()
-            note = note_entry.get().strip()
-
-            if not Utils.validate_cidr(cidr):
-                messagebox.showerror("Error", "Invalid CIDR format.")
-                return
-
-            if assign:
-                if not Utils.validate_note(note):
-                    messagebox.showerror("Error", "Note cannot be empty.")
-                    return
-
-                existing_subnets = [subnet["cidr"] for subnet in self.db.get_all_subnets()]
-                
-                # For existing records, remove the current CIDR from conflict checking
-                if subnet_id is not None:
-                    current_cidr = self.tree.item(selected_item)["values"][1]
-                    if cidr != current_cidr:  # Only check conflicts if CIDR is being changed
-                        existing_subnets.remove(current_cidr)
-                        conflict_msg = Utils.is_conflicting_subnet(cidr, existing_subnets)
-                        if conflict_msg:
-                            messagebox.showerror("Subnet Conflict", conflict_msg)
-                            return
-                        if cidr in existing_subnets:
-                            messagebox.showerror("Error", "CIDR already assigned.")
-                            return
-                    # If CIDR is the same, just update the note
-                    self.db.update_subnet(subnet_id, cidr, note)
-                    self.update_flash_message("CIDR updated successfully", "success")
-                else:  # New subnet
-                    conflict_msg = Utils.is_conflicting_subnet(cidr, existing_subnets)
-                    if conflict_msg:
-                        messagebox.showerror("Subnet Conflict", conflict_msg)
-                        return
-                    if cidr in existing_subnets:
-                        messagebox.showerror("Error", "CIDR already assigned.")
-                        return
-                    self.db.add_subnet(cidr, note)
-                    self.update_flash_message("CIDR assigned successfully", "success")
-            else:  # Unassign
-                if subnet_id is not None:
-                    self.db.delete_subnet(subnet_id)
-                    self.update_flash_message("CIDR unassigned", "info")
-
-            self.load_subnets()
-            popup.destroy()
-
-        # Button frame with updated styling
-        btn_frame = ttk.Frame(popup)
-        btn_frame.pack(pady=config.FRAME_PADDING)
-
-        ttk.Button(
-            btn_frame,
-            text="Save",
-            command=lambda: save_changes(True),
-            style="TButton"
-        ).pack(side="left", padx=5)
-        
-        # Only show Unassign button if this is not a new record
-        if subnet_id is not None and not is_new_record:
-            ttk.Button(
-                btn_frame,
-                text="Unassign",
-                command=lambda: save_changes(False),
-                style="danger.TButton" 
-            ).pack(side="right", padx=5)
-
     def open_modify_popup(self, prefill_cidr=None, is_new_record=False):
-        """ Open a popup to modify subnet details, including new fields with unmasked passwords. """
+        """ Open a popup to modify subnet details, displaying in two equal columns. """
         popup = tk.Toplevel(self.root)
         popup.title("Modify Subnet")
-        popup.geometry("500x500")
+        popup.geometry("600x400")
 
-        fields = ["CIDR", "Note", "Cust", "Cust Email", "Dev Type", "Dev IP", "Dev User", "Dev Pass", "CGW IP", "VPN1 PSK", "VPN2 PSK"]
+        # Define fields for input (Dev Type, Dev User, Dev Pass, VPN1 PSK, VPN2 PSK will not be in the main tree)
+        fields = [
+            ("CIDR", "cidr"), ("Note", "note"), ("Cust", "cust"), ("Cust Email", "cust_email"),
+            ("Dev IP", "dev_ip"), ("CGW IP", "cgw_ip"), ("Dev Type", "dev_type"),
+            ("Dev User", "dev_user"), ("Dev Pass", "dev_pass"), ("VPN1 PSK", "vpn1_psk"), ("VPN2 PSK", "vpn2_psk")
+        ]
+
         entries = {}
 
-        for field in fields:
-            ttk.Label(popup, text=field, font=config.LABEL_FONT).pack(pady=(5, 2))
-            show_value = "" if field == "Dev Pass" else ""
-            entries[field] = ttk.Entry(popup, font=config.ENTRY_FONT, show=show_value)
-            entries[field].pack(pady=(2, 5))
+        # Create two-column layout
+        form_frame = ttk.Frame(popup)
+        form_frame.pack(padx=20, pady=20, fill="both", expand=True)
 
+        for i, (label_text, key) in enumerate(fields):
+            row, col = divmod(i, 2)  # Arrange in two columns
+
+            ttk.Label(form_frame, text=label_text, font=config.LABEL_FONT).grid(row=row, column=col * 2, padx=10, pady=5, sticky="w")
+
+            show_value = "*" if key == "dev_pass" else ""
+            entries[key] = ttk.Entry(form_frame, font=config.ENTRY_FONT, show=show_value)
+            entries[key].grid(row=row, column=(col * 2) + 1, padx=10, pady=5, sticky="ew")
+
+        form_frame.columnconfigure(1, weight=1)
+        form_frame.columnconfigure(3, weight=1)
+
+        # Get selected item data if modifying
         selected_item = self.tree.selection() if not is_new_record else None
         subnet_values = self.tree.item(selected_item)["values"] if selected_item else None
 
         if subnet_values:
-            for i, field in enumerate(fields):
-                value = subnet_values[i + 1]  # Skip ID column
-                entries[field].insert(0, value if value != "*****" else "")
+            stored_values = {
+                "cidr": subnet_values[1], "note": subnet_values[2], "cust": subnet_values[3],
+                "cust_email": subnet_values[4], "dev_ip": subnet_values[5], "cgw_ip": subnet_values[6]
+            }
+            db_entry = self.db.get_all_subnets()
+            full_data = next((s for s in db_entry if s["cidr"] == stored_values["cidr"]), {})
+            stored_values.update(full_data)
 
+            for key, entry in entries.items():
+                entry.insert(0, stored_values.get(key, ""))
+
+        # Save changes function
         def save_changes():
-            """ Save changes to the database, ensuring validation is met. """
-            data = {field: entries[field].get().strip() for field in fields}
+            data = {key: entry.get().strip() for key, entry in entries.items()}
 
-            if not Utils.validate_cidr(data["CIDR"]):
+            if not Utils.validate_cidr(data["cidr"]):
                 messagebox.showerror("Error", "Invalid CIDR format.")
                 return
-            if not Utils.validate_email(data["Cust Email"]):
+            if not Utils.validate_email(data["cust_email"]):
                 messagebox.showerror("Error", "Invalid email format.")
                 return
 
             if subnet_values:
                 self.db.update_subnet(
-                    subnet_values[0], data["CIDR"], data["Note"], data["Cust"], data["Cust Email"],
-                    data["Dev Type"], data["Dev IP"], data["Dev User"], data["Dev Pass"],
-                    data["CGW IP"], data["VPN1 PSK"], data["VPN2 PSK"]
+                    subnet_values[0], data["cidr"], data["note"], data["cust"], data["cust_email"],
+                    data["dev_type"], data["dev_ip"], data["dev_user"], data["dev_pass"],
+                    data["cgw_ip"], data["vpn1_psk"], data["vpn2_psk"]
                 )
                 self.update_flash_message("Subnet updated successfully", "success")
             else:
                 self.db.add_subnet(
-                    data["CIDR"], data["Note"], data["Cust"], data["Cust Email"], data["Dev Type"],
-                    data["Dev IP"], data["Dev User"], data["Dev Pass"], data["CGW IP"],
-                    data["VPN1 PSK"], data["VPN2 PSK"]
+                    data["cidr"], data["note"], data["cust"], data["cust_email"], data["dev_type"],
+                    data["dev_ip"], data["dev_user"], data["dev_pass"], data["cgw_ip"],
+                    data["vpn1_psk"], data["vpn2_psk"]
                 )
                 self.update_flash_message("Subnet added successfully", "success")
 
             self.load_subnets()
             popup.destroy()
 
+        # Save button
         ttk.Button(popup, text="Save", command=save_changes, style="TButton").pack(pady=10)
 
 
