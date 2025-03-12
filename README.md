@@ -1,6 +1,6 @@
 # IP Address Management (IPAM) Tool
 
-A Python-based IP Address Management system for tracking and managing private network subnets. 
+A Python-based IP Address Management system for tracking and managing private network subnets.   Records are encrypted.
 
 This application provides a user-friendly GUI interface for managing IP address assignments across Class A, B, and C private networks.
 
