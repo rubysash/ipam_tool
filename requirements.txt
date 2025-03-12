@@ -1,4 +1,7 @@
+cffi==1.17.1
 colorama==0.4.6
+cryptography==44.0.2
 ipaddress==1.0.23
 pillow==11.1.0
+pycparser==2.22
 ttkbootstrap==1.10.1
